@@ -1,14 +1,14 @@
 # Node ElasticSearch Database Management System
 
-[![Professional Support](https://www.totaljs.com/img/badge-support.svg)](https://www.totaljs.com/support/) [![Chat with contributors](https://www.totaljs.com/img/badge-chat.svg)](https://messenger.totaljs.com) [![NPM version][npm-version-image]][npm-url] [![NPM downloads][npm-downloads-image]][npm-url] [![MIT License][license-image]][license-url]
+[![Professional Support](https://www.totaljs.com/img/badge-support.svg)](https://www.totaljs.com/support/) [![Chat with contributors](https://www.totaljs.com/img/badge-chat.svg)](https://messenger.totaljs.com)
 
 - installation `$ npm install edbms`
 
 ## Initialization
 
 ```javascript
-const ElasticDB = require('elasticdb');
-ElasticDB.url('http://localhost:9200');
+const edbms = require('edbms');
+edbms.url('http://localhost:9200');
 ```
 
 ## Examples
