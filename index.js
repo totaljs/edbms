@@ -208,16 +208,15 @@ ED.$exec = function(builder) {
 		var item;
 		var opt = builder.options;
 		if (opt.first) {
-			if (!response.total)
-				self.output = self.response[cmd.name] = null;
-			else {
+			if (response.total) {
 				item = response.hits[0];
 				if (self.$remap) {
 					item._source.id = item._id;
 					item = item._source;
 				}
 				self.output = self.response[cmd.name] = item;
-			}
+			} else
+				self.output = self.response[cmd.name] = null;
 		} else {
 			var output = {};
 			output.score = response.max_score;
