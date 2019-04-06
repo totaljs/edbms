@@ -86,8 +86,7 @@ ED.exec = function(name, index, data) {
 
 	if (beg !== -1) {
 		var method = index.substring(0, beg);
-		if (method !== 'GET')
-			builder.options.method = method;
+		builder.options.method = method;
 		index = index.substring(beg + 1).trim();
 	}
 
@@ -175,17 +174,20 @@ ED.$exec = function(builder) {
 		cmd.index = DB[cmd.index.substring(1, beg)] + cmd.index.substring(beg + 1);
 		self.url = '';
 	}
-
 	var builder = cmd.builder;
 	var rb = RESTBuilder.url((self.url ? (self.url + '/') : '') + cmd.index);
-	var q = builder.create();
-	rb.json(q);
+
+	if (builder.options.method !== 'GET') {
+		var q = builder.create();
+		rb.json(q);
+	}
+
 	rb.$method = builder.options.method;
 	rb.$keepalive = true;
 	rb.exec(function(err, response) {
 
 		if (response.error) {
-			var err = response.error.type + ': ' + response.error.reason;
+			var err = response.error.type ? (response.error.type + ': ' + response.error.reason) : response.error;
 			self.$errors.push(err);
 			builder.options.fail && builder.options.fail(err);
 			builder.options.callback && builder.options.callback(err);
@@ -196,6 +198,15 @@ ED.$exec = function(builder) {
 
 		if (response.result) {
 			self.output = self.response[cmd.name] = { id: response._id, status: response.result };
+			builder.options.data && builder.options.data(err, self.response[cmd.name]);
+			builder.options.callback && builder.options.callback(err, self.response[cmd.name]);
+			self.$timeout && clearImmediate(self.$timeout);
+			self.$timeout = setImmediate(self.$request);
+			return;
+		}
+
+		if (builder.options.method === 'GET') {
+			self.output = self.response[cmd.name] = response;
 			builder.options.data && builder.options.data(err, self.response[cmd.name]);
 			builder.options.callback && builder.options.callback(err, self.response[cmd.name]);
 			self.$timeout && clearImmediate(self.$timeout);
