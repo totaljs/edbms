@@ -1,11 +1,16 @@
+require('total.js');
+
 var DB = {};
+var pending = 0;
 
 function ElasticDB(url, eb) {
 
 	var t = this;
 	t.$remap = true;
+	// t.$raw = false;
 	t.$errors = eb ? eb : new ErrorBuilder();
 	t.$commands = [];
+
 	// t.$timeout;
 	// t.$output;
 	// t.$outputlast;
@@ -47,8 +52,39 @@ ElasticDB.url = function(name, url) {
 		name = 'default';
 	}
 
+	if (url[url.length - 1] === '/')
+		url = url.substring(0, url.length - 1);
+
 	DB[name] = url;
 	return ElasticDB;
+};
+
+ElasticDB.index = function(name, indexname, callback) {
+
+	if (indexname == null || typeof(indexname) === 'function') {
+		callback = indexname;
+		indexname = name;
+		name = 'default';
+	}
+
+	pending++;
+
+	var url = DB[name];
+	RESTBuilder.HEAD(url + '/' + indexname).exec(function(err, response) {
+
+		pending--;
+
+		if (err)
+			throw err;
+
+		if (!response) {
+			pending++;
+			callback(function(model, callback) {
+				pending--;
+				RESTBuilder.PUT(url + '/' + indexname, model).exec(callback || ERROR('Create index "' + url + '/' + indexname + '"'));
+			});
+		}
+	});
 };
 
 const REG_PARAM = /\$[a-z.-]+/i;
@@ -153,9 +189,16 @@ ED.$validate = function(cmd) {
 	}
 };
 
-ED.$exec = function(builder) {
+ED.$exec = function() {
 
 	var self = this;
+
+	// Pending for indexes...
+	if (pending > 0) {
+		setTimeout(self.$request, 500);
+		return self;
+	}
+
 	var cmd = self.$commands.shift();
 
 	if (cmd == null) {
@@ -174,9 +217,11 @@ ED.$exec = function(builder) {
 		cmd.index = DB[cmd.index.substring(1, beg)] + cmd.index.substring(beg + 1);
 		self.url = '';
 	}
+
 	var builder = cmd.builder;
 	var rb = RESTBuilder.url((self.url ? (self.url + '/') : '') + cmd.index);
 
+	// @TODO: it is needed?
 	if (builder.options.method !== 'GET') {
 		var q = builder.create();
 		rb.json(q);
@@ -185,6 +230,15 @@ ED.$exec = function(builder) {
 	rb.$method = builder.options.method;
 	rb.$keepalive = true;
 	rb.exec(function(err, response) {
+
+		if (self.$raw) {
+			self.output = self.response[cmd.name] = response;
+			builder.options.data && builder.options.data(err, self.response[cmd.name]);
+			builder.options.callback && builder.options.callback(err, self.response[cmd.name]);
+			self.$timeout && clearImmediate(self.$timeout);
+			self.$timeout = setImmediate(self.$request);
+			return;
+		}
 
 		if (response.error) {
 			var err = response.error.type ? (response.error.type + ': ' + response.error.reason) : response.error;
@@ -198,15 +252,6 @@ ED.$exec = function(builder) {
 
 		if (response.result) {
 			self.output = self.response[cmd.name] = { id: response._id, status: response.result };
-			builder.options.data && builder.options.data(err, self.response[cmd.name]);
-			builder.options.callback && builder.options.callback(err, self.response[cmd.name]);
-			self.$timeout && clearImmediate(self.$timeout);
-			self.$timeout = setImmediate(self.$request);
-			return;
-		}
-
-		if (builder.options.method === 'GET') {
-			self.output = self.response[cmd.name] = response;
 			builder.options.data && builder.options.data(err, self.response[cmd.name]);
 			builder.options.callback && builder.options.callback(err, self.response[cmd.name]);
 			self.$timeout && clearImmediate(self.$timeout);
@@ -232,7 +277,7 @@ ED.$exec = function(builder) {
 			var output = {};
 			output.score = response.max_score;
 			output.count = response.total;
-			output.pages = Math.ceil(output.count / opt.take);
+			output.pages = output.count ? Math.ceil(output.count / opt.take) : 0;
 			output.page = opt.skip ? Math.ceil(opt.skip / opt.take) : 1;
 			output.items = response.hits;
 			if (self.$remap) {
@@ -247,7 +292,6 @@ ED.$exec = function(builder) {
 
 		builder.options.data && builder.options.data(err, self.response[cmd.name]);
 		builder.options.callback && builder.options.callback(err, self.response[cmd.name]);
-
 		self.$timeout && clearImmediate(self.$timeout);
 		self.$timeout = setImmediate(self.$request);
 	});
@@ -389,6 +433,7 @@ exports.ElasticDB = ElasticDB;
 exports.url = ElasticDB.url;
 exports.clear = ElasticDB.clear;
 exports.use = ElasticDB.use;
+exports.index = ElasticDB.index;
 
 global.EDB = function(name, err) {
 	if (name && typeof(name) === 'object') {
