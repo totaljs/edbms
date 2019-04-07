@@ -87,7 +87,7 @@ ElasticDB.index = function(name, indexname, callback) {
 	});
 };
 
-const REG_PARAM = /\$[a-z.-]+/i;
+const REG_PARAM = /\$[a-z.-]+/ig;
 const ED = ElasticDB.prototype;
 const TMP = {};
 
@@ -300,7 +300,7 @@ ED.$exec = function() {
 function ElasticQuery() {
 	this.items = [];
 	this.options = { method: 'post' };
-	this.tmp;
+	this.tmp = '';
 }
 
 const EP = ElasticQuery.prototype;
