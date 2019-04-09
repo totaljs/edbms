@@ -87,7 +87,6 @@ ElasticDB.index = function(name, indexname, callback) {
 	});
 };
 
-const REG_PARAM = /\$[a-z.-]+/ig;
 const ED = ElasticDB.prototype;
 const TMP = {};
 
@@ -298,6 +297,7 @@ ED.$exec = function() {
 };
 
 function ElasticQuery() {
+	this.mapper = {};
 	this.items = [];
 	this.options = { method: 'post' };
 	this.tmp = '';
@@ -318,36 +318,50 @@ EP.fields = function(fields) {
 		arr = fields.split(',');
 
 	for (var i = 0; i < arr.length; i++)
-		self.options.fields.push('"' + (arr[i][0] === ' ' ? arr[i].trim() : arr[i]) + '"');
+		self.options.fields.push((arr[i][0] === ' ' ? arr[i].trim() : arr[i]));
 
 	return self;
 };
 
-EP.add = function(command, arg) {
+EP.scope = function(path) {
+	var self = this;
+	self.$scope = path || '';
+	return self;
+};
+
+EP.push = function(path, value) {
+
 	var self = this;
 
-	if (arg) {
-		TMP.value = arg;
-		command = command.replace(REG_PARAM, TMP.replace);
-		self.items.push(command);
+	if (self.$scope)
+		path = self.$scope + (path ? '.' : '') + path;
+
+	if (value === undefined)
+		value = NOOP;
+
+	if (self.mapper[path])
+		self.mapper[path].push(value);
+	else
+		self.mapper[path] = [value];
+
+	return self;
+};
+
+EP.sort = function(name, type) {
+	var self = this;
+	var opt = self.options;
+	var item;
+
+	if (type) {
+		item = {};
+		item[name] = type;
 	} else
-		self.items.push(command);
-	return self;
-};
+		item = name;
 
-EP.push = function(command, arg, end) {
-
-	var self = this;
-
-	if (command) {
-		TMP.value = arg;
-		self.tmp += (self.tmp ? ',' : '') + (arg && arg !== true ? command.replace(REG_PARAM, TMP.replace) : command);
-	}
-
-	if (command == null || arg === true || end) {
-		self.tmp && self.items.push(self.tmp);
-		self.tmp = '';
-	}
+	if (opt.sort)
+		opt.sort.push(item);
+	else
+		opt.sort = [item];
 
 	return self;
 };
@@ -406,12 +420,75 @@ EP.create = function() {
 	if (opt.body)
 		return opt.body;
 
-	var builder = [];
-	opt.take && builder.push('"size":' + opt.take);
-	opt.skip && builder.push('"from":' + opt.skip);
-	opt.fields && opt.fields.length && builder.push('"_source":[' + opt.fields.join(',') + ']');
-	self.items.length && builder.push(self.items.join(','));
-	return '{' + builder.join(',') + '}';
+	var obj = {};
+	var keys = Object.keys(self.mapper);
+	var tmp;
+
+	if (opt.sort)
+		obj.sort = opt.sort;
+
+	opt.take && (obj.size = opt.take);
+	opt.skip && (obj.from = opt.skip);
+	opt.fields && opt.fields.length && (obj._source = opt.fields);
+
+	for (var i = 0; i < keys.length; i++) {
+
+		var key = keys[i];
+		var cur, arr, p, isarr, isend;
+
+		arr = key.split('.');
+		cur = obj;
+
+		for (var j = 0; j < arr.length; j++) {
+
+			p = arr[j];
+			isarr = p[p.length - 1] === ']';
+			isend = j === arr.length - 1;
+
+			if (isarr)
+				p = p.substring(0, p.length - 2);
+
+			if (cur instanceof Array) {
+				// must be ended
+				if (!isend)
+					throw new Error('Not allowed path for "' + key + '".');
+
+			} else if (cur[p] === undefined)
+				cur[p] = isarr ? [] : {};
+
+			if (!isend)
+				cur = cur[p];
+		}
+
+		var items = self.mapper[key];
+		for (var j = 0; j < items.length; j++) {
+			var item = items[j];
+			if (item != NOOP) {
+				if (cur[p] instanceof Array) {
+					cur[p].push(item);
+				} else {
+					if (cur instanceof Array) {
+						tmp = {};
+						tmp[p] = item;
+						cur.push(tmp);
+					} else
+						cur[p] = item;
+				}
+			}
+		}
+	}
+
+	var body = JSON.stringify(obj);
+
+	if (opt.debug)
+		console.log('--->', body);
+
+	return body;
+};
+
+EP.debug = function() {
+	this.options.debug = true;
+	return this;
 };
 
 EP.callback = function(callback) {
