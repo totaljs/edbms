@@ -105,7 +105,86 @@ ED.must = function(err, reverse) {
 	return self;
 };
 
-ED.exec = function(name, index, data) {
+ED.insert = function(index, type, data) {
+
+	if (!index || !type || !data)
+		throw new Error('Missing required arguments.');
+
+	var self = this;
+	var name = index + '/' + type;
+	return self.exec(name, data);
+};
+
+ED.update = function(index, type, id, data) {
+
+	if (!index || !type || !id || !data)
+		throw new Error('Missing required arguments.');
+
+	var self = this;
+	var name = 'PUT {0}/{1}/{2}'.format(index, type, id);
+	return self.exec(name, data);
+};
+
+ED.modify = function(index, id, data) {
+
+	if (!index || !id || !data)
+		throw new Error('Missing required arguments.');
+
+	var self = this;
+	var name = '{0}/_update/{1}'.format(index, id);
+	var model = {};
+	model.doc = data;
+	return self.exec(name, model);
+};
+
+ED.read = function(index, type, id) {
+
+	if (!index || !type || !id)
+		throw new Error('Missing required arguments.');
+
+	var self = this;
+	var name = 'GET {0}/{1}/{2}'.format(index, type, id);
+	return self.exec(name, null, null, true);
+};
+
+ED.list = function(index) {
+
+	if (!index)
+		throw new Error('Missing required arguments.');
+
+	var self = this;
+	var name = index + '/_search';
+	return self.exec(name);
+};
+
+ED.delete = function(index, type, id) {
+
+	if (!index || (type && !id))
+		throw new Error('Missing required arguments.');
+
+	var self = this;
+	var name;
+
+	if (id == null)
+		name = '{0}/_delete_by_query'.format(index);
+	else
+		name = 'DELETE {0}/{1}/{2}'.format(index, type, id);
+
+	return self.exec(name);
+};
+
+ED.refresh = function(index) {
+
+	if (!index)
+		throw new Error('Missing required arguments.');
+
+	var self = this;
+	self.$raw = true;
+	var name = index + '/_refresh';
+	return self.exec(name);
+};
+
+ED.exec = function(name, index, data, read) {
 
 	if (typeof(index) === 'object') {
 		data = index;
@@ -127,6 +206,9 @@ ED.exec = function(name, index, data) {
 
 	if (data)
 		builder.options.body = data;
+
+	if (read)
+		builder.options.one = true;
 
 	builder.$commandindex = self.$commands.push({ name: name, index: index, builder: builder }) - 1;
 	self.$timeout && clearImmediate(self.$timeout);
@@ -218,9 +300,12 @@ ED.$exec = function() {
 	}
 
 	var builder = cmd.builder;
+
+	if (builder.options.refresh)
+		cmd.index += '?refresh';
+
 	var rb = RESTBuilder.url((self.url ? (self.url + '/') : '') + cmd.index);
 
-	// @TODO: it is needed?
 	if (builder.options.method !== 'GET') {
 		var q = builder.create();
 		rb.json(q);
@@ -237,6 +322,29 @@ ED.$exec = function() {
 			self.$timeout && clearImmediate(self.$timeout);
 			self.$timeout = setImmediate(self.$request);
 			return;
+		}
+
+		if (builder.options.one) {
+			if (!response.found)
+				self.output = self.response[cmd.name] = null;
+			else {
+				var source = response._source;
+				source.id = response._id;
+				self.output = self.response[cmd.name] = source;
+			}
+
+			builder.options.data && builder.options.data(err, self.response[cmd.name]);
+			builder.options.callback && builder.options.callback(err, self.response[cmd.name]);
+			self.$timeout && clearImmediate(self.$timeout);
+			self.$timeout = setImmediate(self.$request);
+		}
+
+		if (response.deleted > -1) {
+			self.output = self.response[cmd.name] = { status: response.deleted === 0 ? 'noop' : 'deleted', total: response.deleted };
+			builder.options.data && builder.options.data(err, self.response[cmd.name]);
+			builder.options.callback && builder.options.callback(err, self.response[cmd.name]);
+			self.$timeout && clearImmediate(self.$timeout);
+			self.$timeout = setImmediate(self.$request);
 		}
 
 		if (response.error) {
@@ -260,10 +368,16 @@ ED.$exec = function() {
 
 		response = response.hits;
 
+		if (!response) {
+			self.$timeout && clearImmediate(self.$timeout);
+			self.$timeout = setImmediate(self.$request);
+			return;
+		}
+
 		var item;
 		var opt = builder.options;
 		if (opt.first) {
-			if (response.total) {
+			if (response.total.value) {
 				item = response.hits[0];
 				if (self.$remap) {
 					item._source.id = item._id;
@@ -275,9 +389,9 @@ ED.$exec = function() {
 		} else {
 			var output = {};
 			output.score = response.max_score;
-			output.count = response.total;
-			output.pages = output.count ? Math.ceil(output.count / opt.take) : 0;
-			output.page = opt.skip ? Math.ceil(opt.skip / opt.take) : 1;
+			output.count = response.total.value;
+			output.pages = output.count && opt.take ? Math.ceil(output.count / opt.take) : 0;
+			output.page = opt.skip ? (Math.ceil(opt.skip / opt.take) + 1) : 1;
 			output.items = response.hits;
 			if (self.$remap) {
 				for (var i = 0; i < output.items.length; i++) {
@@ -413,6 +527,11 @@ EP.first = function() {
 	return self;
 };
 
+EP.one = function() {
+	this.options.one = true;
+	return this;
+};
+
 EP.create = function() {
 	var self = this;
 	var opt = self.options;
@@ -478,6 +597,11 @@ EP.create = function() {
 		}
 	}
 
+	if (self.$extend) {
+		for (var i = 0 ; i < self.$extend.length; i++)
+			self.$extend[i](obj);
+	}
+
 	var body = JSON.stringify(obj);
 
 	if (opt.debug)
@@ -486,8 +610,22 @@ EP.create = function() {
 	return body;
 };
 
+EP.extend = function(fn) {
+	var self = this;
+	if (self.$extend)
+		self.$extend.push(fn);
+	else
+		self.$extend = [fn];
+	return self;
+};
+
 EP.debug = function() {
 	this.options.debug = true;
+	return this;
+};
+
+EP.refresh = function() {
+	this.options.refresh = true;
 	return this;
 };
 
