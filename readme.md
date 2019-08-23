@@ -70,4 +70,12 @@ builder.callback(function(err, response) {
 db.refresh('index').callback(function(err, response) {
     console.log(err, response);
 });
+
+// Count of documents
+var builder = db.count('index');
+builder.scope('query.bool.must[]');
+builder.push('term', { userid: 5 });
+builder.callback(function(err, response) {
+    // ...
+});
 ```

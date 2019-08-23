@@ -81,6 +81,7 @@ ElasticDB.index = function(name, indexname, callback) {
 			pending++;
 			callback(function(model, callback) {
 				pending--;
+				console.log(model);
 				RESTBuilder.PUT(url + '/' + indexname, model).exec(callback || ERROR('Create index "' + url + '/' + indexname + '"'));
 			});
 		}
@@ -181,6 +182,17 @@ ED.refresh = function(index) {
 	var self = this;
 	self.$raw = true;
 	var name = index + '/_refresh';
+	return self.exec(name);
+};
+
+ED.count = function(index) {
+
+	if (!index)
+		throw new Error('Missing required arguments.');
+
+	var self = this;
+	self.$raw = true;
+	var name = index + '/_count';
 	return self.exec(name);
 };
 
