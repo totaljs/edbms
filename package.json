@@ -1,0 +1,27 @@
+{
+  "name": "edbms",
+  "version": "1.0.0",
+  "description": "ElasticSearch Database Management System",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/totaljs/edbms.git"
+  },
+  "keywords": [
+    "database",
+    "elastic",
+    "elasticsearch"
+  ],
+  "author": "Tomas Novak",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/totaljs/edbms/issues"
+  },
+  "homepage": "https://github.com/totaljs/edbms#readme",
+  "dependencies": {
+    "total.js": "^3.2.4"
+  }
+}
