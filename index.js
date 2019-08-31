@@ -3,7 +3,7 @@ require('total.js');
 var DB = {};
 var pending = 0;
 
-function ElasticDB(url, eb) {
+function EDBMS(url, eb) {
 
 	var t = this;
 	t.$remap = true;
@@ -27,25 +27,25 @@ function ElasticDB(url, eb) {
 	};
 }
 
-ElasticDB.clear = function() {
+EDBMS.clear = function() {
 	DB = {};
 };
 
-ElasticDB.use = function() {
+EDBMS.use = function() {
 	// Total.js framework
 	if (global.F) {
 		global.F.database = function(err) {
 			if (typeof(err) === 'function') {
-				var db = new ElasticDB();
+				var db = new EDBMS();
 				err.call(db, db);
 			} else
-				return new ElasticDB(err);
+				return new EDBMS(err);
 		};
 	}
-	return ElasticDB;
+	return EDBMS;
 };
 
-ElasticDB.url = function(name, url) {
+EDBMS.url = function(name, url) {
 
 	if (url == null) {
 		url = name;
@@ -56,10 +56,10 @@ ElasticDB.url = function(name, url) {
 		url = url.substring(0, url.length - 1);
 
 	DB[name] = url;
-	return ElasticDB;
+	return EDBMS;
 };
 
-ElasticDB.index = function(name, indexname, callback) {
+EDBMS.index = function(name, indexname, callback) {
 
 	if (indexname == null || typeof(indexname) === 'function') {
 		callback = indexname;
@@ -88,7 +88,7 @@ ElasticDB.index = function(name, indexname, callback) {
 	});
 };
 
-const ED = ElasticDB.prototype;
+const ED = EDBMS.prototype;
 const TMP = {};
 
 TMP.replace = function(text) {
@@ -656,16 +656,16 @@ EP.fail = function(callback) {
 	return this;
 };
 
-exports.ElasticDB = ElasticDB;
-exports.url = ElasticDB.url;
-exports.clear = ElasticDB.clear;
-exports.use = ElasticDB.use;
-exports.index = ElasticDB.index;
+exports.EDBMS = EDBMS;
+exports.url = EDBMS.url;
+exports.clear = EDBMS.clear;
+exports.use = EDBMS.use;
+exports.index = EDBMS.index;
 
 global.EDB = function(name, err) {
 	if (name && typeof(name) === 'object') {
 		err = name;
 		name = null;
 	}
-	return new ElasticDB(name, err);
+	return new EDBMS(name, err);
 };
