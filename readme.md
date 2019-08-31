@@ -7,8 +7,8 @@
 ## Initialization
 
 ```javascript
-const ElasticDB = require('elasticdb');
-ElasticDB.url('http://localhost:9200');
+const EDBMS = require('edbms');
+EDBMS.url('http://localhost:9200');
 ```
 
 ## Examples
